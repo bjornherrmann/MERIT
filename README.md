@@ -3,7 +3,7 @@
 **Memory and Rapid Information-processing Test**: a short cognitive battery that runs in the
 browser on a tablet (iPad, Android tablet, Surface or touch laptop) and works offline once installed.
 
-**Open the app:** https://USERNAME.github.io/REPO/
+**Open the app:** https://bjornherrmann.github.io/MERIT/
 
 ```
 HVLT learning trials 1–3 (examiner)  →  SDMT (participant)  →  HVLT recognition (examiner)  →  CSV
