@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="MERIT">
+<meta name="theme-color" content="#FAFAF8">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>MERIT</title>
+<!--
+  MERIT: Memory and Rapid Information-processing Test
+  HVLT learning trials 1-3 -> SDMT -> HVLT recognition. See SPEC.md.
+  SDMT adapted from Ryan Panela's sdmt-pwa (https://github.com/ryanapanela/sdmt-pwa).
+-->
+<style>
+  :root{
+    --bg:#FAFAF8;
+    --ink:#1A1A1A;
+    --muted:#6B6B66;
+    --line:#D7D7D2;
+    --cell:#FFFFFF;
+    --target:#E03131;
+    --ok:#2F9E44;
+    --okbg:#E9F6EC;
+    --bad:#E03131;
+    --soft:#F0F0EC;
+    --accent:#1C5FB8;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation;}
+  html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;background:var(--bg);}
+  body{position:fixed;inset:0;color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  button,input{font-family:inherit;}
+
+  .screen{display:none;height:100dvh;height:100vh;}
+  .screen.active{display:flex;}
+
+  h1{font-size:clamp(26px,5vmin,38px);font-weight:650;letter-spacing:-0.02em;margin:0 0 4px;}
+  h2{font-size:clamp(20px,3.4vmin,28px);font-weight:650;margin:0;}
+  .sub{color:var(--muted);font-size:15px;margin:0 0 22px;line-height:1.5;}
+  .who{font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;}
+  .btn{position:relative;overflow:hidden;display:block;width:100%;border:none;border-radius:12px;background:var(--ink);
+    color:#fff;font-size:18px;font-weight:600;padding:16px;cursor:pointer;margin-top:10px;}
+  .btn:disabled{opacity:0.35;}
+  .btn.secondary{background:var(--cell);color:var(--ink);border:1px solid var(--line);}
+  .btn.small{display:inline-block;width:auto;font-size:15px;padding:10px 16px;margin:0;}
+  .btn .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent);}
+  .btn .lbl{position:relative;}
+  .linkbtn{background:none;border:none;color:var(--muted);font-size:15px;padding:10px 14px;cursor:pointer;text-decoration:underline;}
+  .note{font-size:13px;color:var(--muted);line-height:1.5;margin-top:16px;
+    background:var(--soft);padding:12px 14px;border-radius:10px;}
+
+  /* ---------- Home / setup ---------- */
+  #home{flex-direction:column;align-items:center;overflow:auto;padding:28px 24px 40px;}
+  .card{width:min(620px,100%);}
+  .field{margin-bottom:16px;}
+  .field > label{display:block;font-size:13px;font-weight:600;color:var(--muted);
+    text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;}
+  .field input[type=text]{
+    width:100%;font-size:17px;padding:13px 14px;border:1px solid var(--line);
+    border-radius:10px;background:var(--cell);color:var(--ink);-webkit-user-select:text;user-select:text;}
+  .field input:focus{outline:none;border-color:var(--ink);}
+  .fields{display:flex;gap:12px;}
+  .fields .field{flex:1;min-width:0;}
+  .fields .field.narrow{flex:0 0 130px;}
+  .seg{display:flex;gap:6px;flex-wrap:wrap;}
+  .seg button{flex:1;min-width:56px;font-size:16px;padding:12px 8px;border:1px solid var(--line);
+    border-radius:10px;background:var(--cell);color:var(--ink);cursor:pointer;}
+  .seg button.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .sessions{margin-top:8px;border-top:1px solid var(--line);}
+  .srow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;}
+  .srow .info{flex:1;line-height:1.4;}
+  .srow .st{font-size:12px;color:var(--muted);}
+  .srow .st.bad{color:var(--bad);}
+  .section-h{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin:30px 0 6px;}
+  .err{color:var(--bad);font-size:14px;margin-top:8px;}
+
+  /* ---------- Message / instruction screens ---------- */
+  #msg{flex-direction:column;align-items:center;justify-content:center;overflow:auto;padding:32px 24px;}
+  #msg .card{width:min(760px,100%);}
+  .script{font-size:clamp(20px,3.2vmin,27px);line-height:1.5;margin:14px 0 18px;}
+  .exnote{font-size:15px;color:var(--muted);line-height:1.5;background:var(--soft);padding:12px 14px;border-radius:10px;margin:0 0 8px;}
+
+  /* abort control, examiner screens only */
+  #abort{position:fixed;top:calc(8px + env(safe-area-inset-top));right:10px;z-index:40;display:none;
+    width:auto;margin:0;padding:8px 12px;font-size:12px;font-weight:600;background:var(--soft);color:var(--muted);
+    border:1px solid var(--line);border-radius:8px;}
+  #abort.show{display:block;}
+
+  /* ---------- HVLT presentation ---------- */
+  #present{flex-direction:column;align-items:center;justify-content:center;position:relative;}
+  .pword{font-size:clamp(56px,13vmin,150px);font-weight:600;letter-spacing:0.03em;}
+  .pcenter{font-size:clamp(20px,3.4vmin,28px);color:var(--muted);text-align:center;line-height:1.5;}
+  .flip{transform:rotate(180deg);}
+  .exstrip{position:absolute;left:0;right:0;bottom:0;padding:14px 20px calc(14px + env(safe-area-inset-bottom));
+    text-align:center;color:var(--muted);font-size:16px;border-top:1px solid var(--line);}
+
+  /* ---------- HVLT recall ---------- */
+  #recall{flex-direction:column;padding:18px 22px calc(16px + env(safe-area-inset-bottom));}
+  .rhead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-right:110px;}
+  .rsay{font-size:17px;color:var(--muted);margin-top:6px;line-height:1.4;}
+  .timer{font-variant-numeric:tabular-nums;font-size:clamp(22px,4vmin,30px);font-weight:650;}
+  .rgrid{flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr;gap:12px;margin:16px 0;}
+  .wbtn{position:relative;border:2px solid var(--line);border-radius:14px;background:var(--cell);
+    font-size:clamp(20px,3.6vmin,30px);font-weight:600;color:var(--ink);cursor:pointer;
+    display:flex;align-items:center;justify-content:flex-start;gap:14px;padding:0 18px;}
+  .wbtn .box{flex:none;width:30px;height:30px;border:2px solid var(--line);border-radius:7px;
+    display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff;font-weight:700;}
+  .wbtn.on{border-color:var(--ok);background:var(--okbg);}
+  .wbtn.on .box{background:var(--ok);border-color:var(--ok);}
+  .rfoot{display:flex;align-items:center;justify-content:center;gap:24px;}
+  .rfoot span{font-size:17px;color:var(--muted);}
+  .rfoot .btn{width:auto;min-width:200px;margin:0;}
+
+  /* ---------- HVLT recognition ---------- */
+  #recog{flex-direction:column;padding:18px 22px calc(16px + env(safe-area-inset-bottom));}
+  .gtop{display:flex;align-items:center;gap:14px;padding-right:110px;min-height:44px;}
+  .gtop span{font-size:17px;color:var(--muted);font-variant-numeric:tabular-nums;}
+  .gword{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;
+    font-size:clamp(56px,13vmin,150px);font-weight:600;letter-spacing:0.03em;}
+  .gword.small{font-size:clamp(26px,5vmin,44px);color:var(--muted);flex-direction:column;}
+  .gword.small .lab{font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;}
+  .gbtns{display:flex;gap:16px;}
+  .gbtn{flex:1;min-height:clamp(80px,15vh,130px);border:2px solid var(--line);border-radius:16px;background:var(--cell);
+    font-size:clamp(26px,5vmin,40px);font-weight:650;color:var(--ink);cursor:pointer;}
+  .gbtn:active{background:var(--soft);}
+  .gbtn:disabled{opacity:0.35;}
+  .gfoot{display:flex;justify-content:center;margin-top:6px;}
+
+  /* ---------- SDMT (from sdmt-pwa) ---------- */
+  #sdmt{flex-direction:column;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 4px;}
+  .pbadge{font-size:12px;font-weight:700;letter-spacing:0.08em;color:var(--target);text-transform:uppercase;}
+  .quit{position:relative;overflow:hidden;font-size:13px;color:var(--muted);background:none;border:1px solid transparent;
+    border-radius:8px;padding:6px 10px;cursor:pointer;}
+  .quit .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--soft);}
+  .quit .lbl{position:relative;}
+
+  .keywrap{padding:2px 12px 12px;border-bottom:1px solid var(--line);}
+  .keylabel{font-size:11px;font-weight:700;letter-spacing:0.1em;color:var(--muted);
+    text-transform:uppercase;text-align:center;margin:0 0 6px;}
+  .keyrow{display:grid;grid-template-columns:repeat(9,1fr);gap:10px;max-width:940px;margin:0 auto;}
+  .keycell{border:1px solid var(--line);border-radius:12px;background:var(--cell);text-align:center;padding:8px 2px;}
+  .keycell .sym{font-size:clamp(30px,6.6vmin,60px);line-height:1.05;}
+  .keycell .dig{font-size:clamp(18px,3.6vmin,30px);font-weight:700;color:var(--muted);
+    border-top:1px solid var(--line);margin-top:4px;padding-top:3px;}
+
+  .stage{flex:1;display:flex;align-items:center;justify-content:center;padding:8px 12px;}
+  .targets{position:relative;display:grid;grid-template-columns:repeat(9,1fr);gap:10px;width:100%;max-width:820px;}
+  .tcell{text-align:center;}
+  .tcell .sym{font-size:clamp(30px,8vmin,64px);line-height:1;padding:6px 0;}
+  .tcell .ans{height:clamp(30px,6vmin,46px);display:flex;align-items:center;justify-content:center;
+    font-size:clamp(22px,5vmin,38px);font-weight:700;border-top:2px solid var(--line);margin-top:6px;color:var(--ink);}
+  .tcell .ans.ok{color:var(--ok);}
+  .tcell .ans.bad{color:var(--bad);}
+  .highlight{position:absolute;border:4px solid var(--target);border-radius:14px;pointer-events:none;
+    top:0;left:0;width:0;height:0;transition:left .12s ease, width .12s ease;}
+
+  .pad{display:grid;grid-template-columns:repeat(9,1fr);gap:10px;
+    padding:12px 16px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--line);
+    max-width:900px;margin:0 auto;width:100%;}
+  .key{border:1px solid var(--line);border-radius:14px;background:var(--cell);
+    font-size:clamp(24px,5vmin,42px);font-weight:600;color:var(--ink);
+    min-height:clamp(64px,13vh,108px);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .key:active{background:var(--soft);transform:scale(0.97);}
+
+  #count{position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:50;}
+  #count.active{display:flex;}
+  #count span{font-size:clamp(80px,22vmin,180px);font-weight:700;}
+
+  /* ---------- Done ---------- */
+  #done{flex-direction:column;align-items:center;overflow:auto;padding:28px 20px;}
+  textarea{width:100%;height:140px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;
+    border:1px solid var(--line);border-radius:10px;padding:10px;-webkit-user-select:text;user-select:text;
+    background:var(--cell);color:var(--ink);margin-top:10px;}
+  .actions{display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;}
+  .actions .btn{flex:1;min-width:140px;margin-top:0;}
+
+  /* overlay used while loading audio */
+  #busy{position:fixed;inset:0;background:rgba(250,250,248,0.92);display:none;align-items:center;justify-content:center;
+    z-index:60;font-size:20px;color:var(--muted);}
+  #busy.active{display:flex;}
+</style>
+</head>
+<body>
+
+<!-- ================= HOME / SETUP ================= -->
+<section id="home" class="screen active">
+  <div class="card">
+    <h1>MERIT</h1>
+    <p class="sub">Memory and Rapid Information-processing Test · HVLT trials 1–3 → SDMT → HVLT recognition</p>
+
+    <div class="fields">
+      <div class="field">
+        <label for="pid">Participant ID</label>
+        <input type="text" id="pid" placeholder="e.g. P001" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      </div>
+      <div class="field narrow">
+        <label for="exp">Examiner</label>
+        <input type="text" id="exp" placeholder="initials" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      </div>
+    </div>
+    <div class="field"><label>HVLT version</label><div class="seg" id="segMod"></div></div>
+    <div class="field"><label>HVLT form (word list)</label><div class="seg" id="segForm"></div></div>
+    <div class="field" id="fieldSeat"><label>Seating (visual version)</label><div class="seg" id="segSeat"></div></div>
+    <div class="field"><label>SDMT version</label><div class="seg" id="segSdmtVer"></div></div>
+    <div class="field"><label>SDMT duration</label><div class="seg" id="segDur"></div></div>
+    <div class="field"><label>SDMT practice run (with feedback)</label><div class="seg" id="segPrac"></div></div>
+
+    <button class="btn" id="startBtn" disabled>Start session</button>
+    <div class="err" id="homeErr"></div>
+
+    <p class="note">Run in <strong>landscape</strong>. Install the app to the home screen (iPad: Share → “Add to Home Screen”;
+      Android/Windows: “Install app”) to run full-screen and offline, and lock the device to the app during testing.
+      Data stay on this device and are saved after every step; download the CSV at the end of each session.</p>
+
+    <div class="section-h">Audio files</div>
+    <div class="sub" id="audioStatus" style="margin:0 0 6px">Checking…</div>
+    <button class="btn secondary small" id="audioRefresh">Re-check / re-download audio</button>
+
+    <div class="section-h">Sessions on this device</div>
+    <div class="sessions" id="sessions"></div>
+    <p class="sub" style="margin-top:14px;font-size:12px" id="verLine"></p>
+  </div>
+</section>
+
+<!-- ================= MESSAGE / INSTRUCTIONS (filled per step) ================= -->
+<section id="msg" class="screen"></section>
+
+<!-- ================= HVLT PRESENTATION ================= -->
+<section id="present" class="screen">
+  <div class="pword" id="pword"></div>
+  <div class="exstrip" id="pinfo"></div>
+</section>
+
+<!-- ================= HVLT RECALL ================= -->
+<section id="recall" class="screen">
+  <div class="rhead">
+    <div>
+      <div class="who">Examiner</div>
+      <h2 id="rtitle">Trial 1 · Recall</h2>
+      <div class="rsay"><span id="rpick"></span>Say: “Now tell me all the words you remember, in any order.”<br>
+        Tap each word as it is recalled. Tap again to undo.</div>
+    </div>
+    <div class="timer" id="rtimer">0:00</div>
+  </div>
+  <div class="rgrid" id="rgrid"></div>
+  <div class="rfoot">
+    <span id="rcount">0 / 12 recalled</span>
+    <button class="btn" id="rdone">Done</button>
+  </div>
+</section>
+
+<!-- ================= HVLT RECOGNITION ================= -->
+<section id="recog" class="screen">
+  <div class="gtop">
+    <span id="gprog">1 / 24</span>
+    <button class="btn secondary small" id="greplay">Replay</button>
+  </div>
+  <div class="gword" id="gword"></div>
+  <div class="gbtns" id="gbtns">
+    <button class="gbtn" id="gold">Old</button>
+    <button class="gbtn" id="gnew">New</button>
+  </div>
+  <button class="btn" id="gfinish" style="display:none">Finish recognition</button>
+  <div class="gfoot"><button class="linkbtn" id="gundo">Undo last answer</button></div>
+</section>
+
+<!-- ================= SDMT ================= -->
+<div id="count"><span id="countNum">3</span></div>
+
+<section id="sdmt" class="screen">
+  <div class="topbar">
+    <div class="timer" id="timer">90.0</div>
+    <div class="pbadge" id="pbadge" style="visibility:hidden">Practice</div>
+    <button class="quit" id="quitBtn"><span class="fill"></span><span class="lbl">End (hold)</span></button>
+  </div>
+  <div class="keywrap">
+    <p class="keylabel">Key</p>
+    <div class="keyrow" id="keyrow"></div>
+  </div>
+  <div class="stage">
+    <div class="targets" id="targets">
+      <div class="highlight" id="highlight"></div>
+    </div>
+  </div>
+  <div class="pad" id="pad"></div>
+</section>
+
+<!-- ================= DONE ================= -->
+<section id="done" class="screen">
+  <div class="card">
+    <h1>Session complete</h1>
+    <p class="sub" id="doneSub"></p>
+    <div class="actions">
+      <button class="btn" id="dlBtn">Download CSV</button>
+      <button class="btn secondary" id="shareBtn">Share / Save to Files</button>
+    </div>
+    <p class="sub" style="margin:16px 0 4px;font-size:13px;">Raw data (copy from here if the download is blocked):</p>
+    <textarea id="csvBox" readonly></textarea>
+    <button class="btn secondary" id="newBtn" style="margin-top:14px;">Back to start</button>
+  </div>
+</section>
+
+<button class="btn" id="abort"><span class="fill"></span><span class="lbl">Abort (hold)</span></button>
+<div id="busy">Loading audio…</div>
+
+<script>
+"use strict";
+
+const APP_VERSION = '0.1.7';
+
+/* ============================================================
+   SETTINGS
+   ============================================================ */
+const AUDIO_DIR = 'audio/';      // audio files: audio/f<form>_<word>.mp3, e.g. audio/f1_lion.mp3
+const AUDIO_EXT = 'mp3';
+const SOA_MS = 2000;             // auditory list: one word every 2 s (onset to onset)
+const LEAD_MS = 1000;            // silence between "Start trial" and the first word
+const RECOG_ITI_MS = 500;        // blank between a recognition answer and the next word
+const SDMT_DURATIONS = [60, 90, 120, 150, 180];
+const SDMT_PRACTICE = [0, 15, 30, 60, 90];   // 0 = no practice run
+const DEFAULTS = { sdmt_duration_s: 120, sdmt_practice_s: 30, seating: 'opposite' };
+
+/* SDMT symbols (from sdmt-pwa). */
+const SYMBOLS = ['⊕','◐','★','⊿','⋈','⊞','◇','∿','⋔'];
+// ⊕ ◐ ★ ⊿ ⋈ ⊞ ◇ ∿ ⋔
+
+/* SDMT versions 1-6, for repeated testing. Same for every participant on a version.
+   key[d-1]  = index into SYMBOLS of the symbol paired with digit d. Version 1 is the original
+               sdmt-pwa key; in versions 2-6 every symbol has a different digit than in any other version.
+   practice/test = fixed digit sequences: no digit twice in a row (also when wrapping around), and
+               each block of 27 items has every digit exactly 3 times. Test: 378 items (wraps if exceeded).
+   Generated once with a fixed seed (20261020); see SPEC.md §4. */
+const SDMT_VERSIONS = {
+  1: { key:[0,1,2,3,4,5,6,7,8],
+       practice:'656432871836921295934785741459861596785641327981473232535841689746252738637191492637291929517846834654328175',
+       test:'463934278561298151327456798374676254951953814837829126937813829459161726434725685476595324362726839419817185349876893147257618535126492567928136483768712949152354513471787621983569284934526967174829569341358576248123518219674368753765214894293167243546952851493713967828371428761989623968253174545425718495632676985781931234347873951485289649653721216374157297869148935386542162' },
+  2: { key:[6,2,4,8,0,3,1,5,7],
+       practice:'461958121739423726896483575273873154197698681392654542971317648437429585326259861763456169481934258932872571',
+       test:'215396516943737247456829818724365479178183659591426238984823682757391291516374546467381479258163512468929573125927689848375147613296435295249184861743873965263517175897842158253463194263967578159217638384614279635429249618352985743476319728516432158474762197815639563928943952392817546271586761438419758714682794891653235326254318641782935831625946797394761872782648132543159569' },
+  3: { key:[4,5,8,2,6,1,7,3,0],
+       practice:'149715286435189573232648976162725246935783749148693815252897178465635738231949146243652764159795718189834263',
+       test:'543473815912186529634797826256379421738491837186592546483271815846971573529346926367458741692897524631831295657892623573419167858291434681796821923152768543437945298959721658371345146827346272416349357487281518396569568527362989418714756932134943573831752628624746918591948654323591926842178173765424195643637538725167828919865865731394369872494175212161275849459637523728631489' },
+  4: { key:[7,3,1,6,5,8,2,0,4],
+       practice:'957189513769234628458231674793271693158941256487358462637148291587239834651749625216769178958326324397514854',
+       test:'287329761231584354698176495319412485239873456762781596745497823746516839215298361384531364297286519457217869528271862143964617875359394927192538728413643518695476251867826974594168372341395761984932531647584826397251398716521957985246436283741734957314297615265148683829458519246469231563797378218793617561256391828985474243648718565123497959362173284254956783425816231463798197' },
+  5: { key:[3,6,0,7,1,2,8,4,5],
+       practice:'786743264364937892515852191517498196362942612385378574514395274787653862126948913958456857347123169729348621',
+       test:'862179653989421264357874153126747315826485329581379649518584326496936329718754217273412646592318374981895765478652579187629313482935164329859812656371937428674154724648653583129253691717984323236297546517416898194785743537869236825751426491891351862976837852374924141695312158598689572943614247367932516871742369818324564597954819712143483697872626535935826192475785278313164946' },
+  6: { key:[1,0,3,5,7,6,4,8,2],
+       practice:'189572827126164956373548439235828297963968475145176314953616894162847252873491357417394538176789562362182549',
+       test:'549513282391694671254873876326867569143132125745898974321857964734825241591673689274968987435631854723615219476125425832797146391683958156315841829683972492737645974568181367398241923565274348246165347967985171235928623561357876932491748145892458757286291316394781395246985341246897121767534256839739326719429458181365826754512692178629547438615374389818345364712731249265789659' },
+};
+
+/* ============================================================
+   HVLT FORMS
+   list  = the 12 words in presentation order
+   recog = the 24 recognition words in presentation order
+           (words from the list = targets; "*" = related distractor;
+            everything else = unrelated distractor)
+   Source: docs/Hopkins.pdf, corrected (see SPEC.md §9):
+   - Form 1: LION added (missing in the PDF).
+   - Form 2: COW/HUT in the PDF replaced by BOMB/RIFLE (positions 10-11 not confirmed).
+   - Form 3: "harmonica" is listed as unrelated in the PDF; not confirmed.
+   Recognition order: PDF grid read row by row (provisional).
+   ============================================================ */
+const FORMS = {
+  1: { cats: 'four-legged animals, precious stones, human dwellings',
+    list: ['LION','EMERALD','HORSE','TENT','SAPPHIRE','HOTEL','CAVE','OPAL','TIGER','PEARL','COW','HUT'],
+    recog: ['HORSE','ruby*','CAVE','balloon','coffee','LION',
+            'house*','OPAL','TIGER','boat','scarf','PEARL',
+            'HUT','EMERALD','SAPPHIRE','dog*','apartment*','penny',
+            'TENT','mountain','cat*','HOTEL','COW','diamond*'] },
+  2: { cats: 'kitchen utensils, alcoholic beverages, weapons',
+    list: ['FORK','RUM','PAN','PISTOL','SWORD','SPATULA','BOURBON','VODKA','POT','BOMB','RIFLE','WINE'],
+    recog: ['spoon*','PISTOL','doll','whiskey*','FORK','POT',
+            'harmonica','can opener*','SWORD','pencil','gun*','VODKA',
+            'knife*','RUM','trout','BOMB','PAN','gold',
+            'WINE','lemon','SPATULA','BOURBON','beer*','RIFLE'] },
+  3: { cats: 'musical instruments, fuels, food flavourings',
+    list: ['SUGAR','TRUMPET','VIOLIN','COAL','GARLIC','KEROSINE','VANILLA','WOOD','CLARINET','FLUTE','CINNAMON','GASOLINE'],
+    recog: ['pepper*','GARLIC','WOOD','drum*','oil*','SUGAR',
+            'harmonica','salt*','priest','chair','COAL','CLARINET',
+            'TRUMPET','basement','CINNAMON','FLUTE','electricity*','moon',
+            'KEROSINE','VANILLA','GASOLINE','sand','piano*','VIOLIN'] },
+  4: { cats: 'birds, articles of clothing, carpenter’s tools',
+    list: ['CANARY','SHOES','EAGLE','BLOUSE','NAILS','CROW','BLUEBIRD','SCREWDRIVER','PANTS','CHISEL','SKIRT','WRENCH'],
+    recog: ['BLUEBIRD','shirt*','CHISEL','EAGLE','chocolate','robin*',
+            'chapel','SCREWDRIVER','CROW','sparrow*','WRENCH','PANTS',
+            'NAILS','socks*','child','SHOES','hair','hammer*',
+            'CANARY','apple','SKIRT','saw*','silver','BLOUSE'] },
+  5: { cats: 'occupations/professions, sports, vegetables',
+    list: ['TEACHER','BASKETBALL','LETTUCE','DENTIST','TENNIS','BEAN','ENGINEER','POTATO','PROFESSOR','GOLF','CORN','SOCCER'],
+    recog: ['TENNIS','football*','PROFESSOR','spinach*','lawyer*','submarine',
+            'GOLF','DENTIST','LETTUCE','spider','water','BEAN',
+            'BASKETBALL','doctor*','CORN','baseball*','TEACHER','snake',
+            'carrot*','ENGINEER','glove','SOCCER','POTATO','tulip'] },
+  6: { cats: 'fish, parts of a building, weather phenomena',
+    list: ['SHARK','WALL','HERRING','RAIN','FLOOR','HAIL','CATFISH','ROOF','SALMON','STORM','CEILING','SNOW'],
+    recog: ['HAIL','bass*','SNOW','bank','FLOOR','mustard',
+            'window*','CEILING','canyon','RAIN','ladder','STORM',
+            'HERRING','SALMON','tornado*','trout*','melon','ROOF',
+            'SHARK','hurricane*','elbow','CATFISH','WALL','door*'] }
+};
+
+/* Turn the compact form definition into {list, recog:[{w,type}]} and check its structure. */
+function parseForm(n){
+  const f = FORMS[n];
+  const recog = f.recog.map(raw => {
+    const w = raw.replace('*','').toUpperCase();
+    const type = f.list.includes(w) ? 'target' : (raw.endsWith('*') ? 'related' : 'unrelated');
+    return { w, type };
+  });
+  const count = t => recog.filter(r => r.type === t).length;
+  const ok = f.list.length === 12 && recog.length === 24 &&
+             count('target') === 12 && count('related') === 6 && count('unrelated') === 6;
+  return { n, cats: f.cats, list: f.list.slice(), recog, ok };
+}
+
+function audioUrl(form, w){
+  return AUDIO_DIR + 'f' + form + '_' + w.toLowerCase().replace(/\s+/g,'_') + '.' + AUDIO_EXT;
+}
+function formWords(form){                // every word that needs an audio file (the 24 recognition words)
+  return parseForm(form).recog.map(r => r.w);
+}
+
+/* ============================================================
+   INSTRUCTIONS (draft wording; see SPEC.md §10)
+   ============================================================ */
+const TXT = {
+  trial1: {
+    auditory: 'You are going to hear a list of words. Listen carefully, and try to remember as many of the words as you can. When the list is finished, I will ask you to tell me all the words you remember, in any order. Ready?',
+    visual: 'I am going to show you a list of words, one at a time. Please read each word out loud. Try to remember as many of the words as you can. When the list is finished, I will ask you to tell me all the words you remember, in any order. Ready?'
+  },
+  trialN: {
+    auditory: 'You are going to hear the same list again. Try to remember as many words as you can, including the words you already said. When the list is finished, tell me all the words you remember, in any order.',
+    visual: 'I am going to show you the same list again. Please read each word out loud again. Try to remember as many words as you can, including the words you already said. When the list is finished, tell me all the words you remember, in any order.'
+  },
+  note: {
+    auditory: 'Tap Start. The list starts after 1 second and takes about 24 seconds. Recall scoring opens automatically after the last word.',
+    visual: 'Tap Start, then place the tablet so the participant can read it. Tap once to show the first word, then tap the screen each time the participant has read a word aloud. Recall scoring opens after the 12th word.'
+  },
+  recog: {
+    auditory: 'Now you will hear some words. Some of them were on the list you learned, and some were not. For each word, say “old” if it was on the list, or “new” if it was not.',
+    visual: 'Now I am going to show you some words. Some of them were on the list you learned, and some were not. For each word, say “old” if it was on the list, or “new” if it was not.'
+  },
+  recogNote: {
+    auditory: 'Each word plays when it appears. Tap the participant’s answer; the next word follows. Replay repeats the current word. Use “Undo last answer” after a wrong tap.',
+    visual: 'Place the tablet so the participant can read the word. Tap the participant’s answer; the next word follows. Use “Undo last answer” after a wrong tap.'
+  },
+  sdmt: 'At the top of the screen is a key. Each symbol is matched with a number. Below the key you will see a row of symbols. For the symbol in the red box, find it in the key and tap its number on the keypad at the bottom. The red box then moves to the next symbol. Work as quickly and accurately as you can.',
+  sdmtPracticeDone: 'Practice finished. Now the real test. Work as fast as you can without making mistakes, and keep going until the time is up.'
+};
+
+/* ============================================================
+   UTILITIES
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const pad2 = n => String(n).padStart(2,'0');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function localIso(d){                    // 2026-10-20T14:32:05-04:00
+  const off = -d.getTimezoneOffset(), sign = off >= 0 ? '+' : '-', a = Math.abs(off);
+  return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())+'T'+
+    pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds())+
+    sign+pad2(Math.floor(a/60))+':'+pad2(a%60);
+}
+
+function showScreen(id, examiner){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+  $('abort').classList.toggle('show', !!(S && examiner));
+}
+
+/* Press-and-hold button: calls fn after ms of continuous press. */
+function makeHold(el, ms, fn){
+  const fill = el.querySelector('.fill');
+  let t = null;
+  const reset = () => { clearTimeout(t); t = null; fill.style.transition = 'none'; fill.style.width = '0'; };
+  el.onpointerdown = e => {
+    e.preventDefault(); reset();
+    void fill.offsetWidth;
+    fill.style.transition = 'width ' + ms + 'ms linear'; fill.style.width = '100%';
+    t = setTimeout(() => { reset(); fn(); }, ms);
+  };
+  el.onpointerup = el.onpointerleave = el.onpointercancel = () => { if (t) reset(); };
+  el.onclick = null;
+}
+
+/* ============================================================
+   STORAGE: one localStorage entry per session, saved after every step
+   ============================================================ */
+const store = {
+  get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } }
+};
+const IDX_KEY = 'merit.index';
+const sessKey = id => 'merit.s.' + id;
+
+let S = null;          // the running session
+let FORM = null;       // parsed form for the running session
+
+let saveFailed = false;   // device storage full: the CSV must be downloaded at the end
+function save(){
+  if (!S) return;
+  if (!store.set(sessKey(S.meta.session_id), S)) saveFailed = true;
+}
+function addRow(r){ S.rows.push(r); }
+
+/* ============================================================
+   CSV
+   ============================================================ */
+const META_COLS = ['participant_id','experimenter','session_id','session_start','app_version','modality','form','seating',
+                   'sdmt_version','sdmt_duration_s','sdmt_practice_s'];
+const ROW_COLS  = ['task','trial','position','item','item_type','correct_answer','response','correct',
+                   'recall_order','t_ms','rt_ms','duration_ms','n_plays'];
+
+function csvCell(v){ v = (v === undefined || v === null) ? '' : String(v); return /[",\n\r]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+function toCSV(sess){
+  const head = META_COLS.concat(ROW_COLS).join(',');
+  const meta = META_COLS.map(c => csvCell(sess.meta[c]));
+  const lines = sess.rows.map(r => meta.concat(ROW_COLS.map(c => csvCell(r[c]))).join(','));
+  return head + '\n' + lines.join('\n') + '\n';
+}
+function csvName(sess){
+  const m = sess.meta, d = new Date(m.session_start_ms);
+  const stamp = d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())+'_'+pad2(d.getHours())+pad2(d.getMinutes());
+  const tag = sess.status === 'complete' ? '' : '_' + sess.status;
+  const safe = v => String(v).replace(/[^a-z0-9_-]/gi,'_');
+  return 'MERIT_' + safe(m.participant_id) + (m.experimenter ? '_' + safe(m.experimenter) : '') +
+         '_F' + m.form + '_' + (m.modality === 'auditory' ? 'aud' : 'vis') +
+         (m.sdmt_version ? '_S' + m.sdmt_version : '') + '_' + stamp + tag + '.csv';
+}
+function downloadCSV(sess){
+  const blob = new Blob(['﻿' + toCSV(sess)], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = csvName(sess);
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+async function shareCSV(sess){
+  const file = new File(['﻿' + toCSV(sess)], csvName(sess), { type: 'text/csv' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })){
+    try { await navigator.share({ files: [file], title: csvName(sess) }); } catch(e){ /* cancelled */ }
+  } else {
+    downloadCSV(sess);
+  }
+}
+
+/* ============================================================
+   AUDIO
+   Web Audio for file playback (sample-accurate scheduling). A session only starts
+   when all 24 files of its form have loaded.
+   ============================================================ */
+let actx = null;
+const buffers = {};      // word -> AudioBuffer, for the running session's form
+
+function unlockAudio(){  // must run inside a tap handler (iOS)
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}   // ignore the silent switch
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!actx && AC) actx = new AC();
+  if (actx){
+    actx.resume();
+    const s = actx.createBufferSource(); s.buffer = actx.createBuffer(1, 1, 22050);
+    s.connect(actx.destination); s.start(0);
+  }
+}
+
+async function loadAudio(form){
+  const missing = [];
+  await Promise.all(formWords(form).map(async w => {
+    try {
+      if (!actx) throw new Error('no audio context');
+      const r = await fetch(audioUrl(form, w));
+      if (!r.ok) throw new Error(r.status);
+      const ab = await r.arrayBuffer();
+      buffers[w] = await new Promise((res, rej) => actx.decodeAudioData(ab, res, rej));
+    } catch(e){
+      buffers[w] = null; missing.push(w);
+    }
+  }));
+  return missing;
+}
+
+/* Play a word after delayMs. Returns the clip duration in ms. */
+function playWord(w, delayMs){
+  const buf = buffers[w];
+  if (actx.state !== 'running') actx.resume();
+  const s = actx.createBufferSource(); s.buffer = buf; s.connect(actx.destination);
+  s.start(actx.currentTime + delayMs/1000);
+  return Math.round(buf.duration*1000);
+}
+
+/* Fetch every audio file into a separate cache so the app works offline.
+   This cache is kept across app updates (see sw.js). */
+const AUDIO_CACHE = 'merit-audio';
+async function cacheAudio(refresh){
+  const el = $('audioStatus');
+  if (!('caches' in window) || location.protocol === 'file:'){
+    el.textContent = 'Offline audio caching is not available here (open the app over http/https).';
+    return;
+  }
+  if (refresh) await caches.delete(AUDIO_CACHE);
+  const c = await caches.open(AUDIO_CACHE);
+  const counts = {};
+  await Promise.all(Object.keys(FORMS).map(async f => {
+    counts[f] = 0;
+    await Promise.all(formWords(f).map(async w => {
+      const url = audioUrl(f, w);
+      if (await c.match(url)){ counts[f]++; return; }
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        await c.put(url, r);
+        counts[f]++;
+      } catch(e){ console.warn('MERIT audio not cached:', url, e.message); }
+    }));
+  }));
+  el.textContent = 'Cached for offline use: ' +
+    Object.keys(FORMS).map(f => 'Form ' + f + ' ' + counts[f] + '/24').join(' · ');
+}
+
+/* ============================================================
+   GENERIC MESSAGE / INSTRUCTION SCREEN
+   ============================================================ */
+function message(o){
+  const who = o.who ? '<div class="who">' + o.who + '</div>' : '';
+  $('msg').innerHTML = '<div class="card">' + who + '<h1>' + o.title + '</h1>' +
+    (o.script ? '<p class="script">' + o.script + '</p>' : '') + (o.html || '') +
+    (o.note ? '<p class="exnote">' + o.note + '</p>' : '') +
+    '<button class="btn" id="msgBtn" disabled><span class="fill"></span><span class="lbl">' + o.button + '</span></button></div>';
+  showScreen('msg', o.examiner !== false);
+  return new Promise(res => {
+    const b = $('msgBtn');
+    setTimeout(() => { b.disabled = false; }, 400);      // guard against a double tap skipping a screen
+    if (o.hold) makeHold(b, 2000, res);
+    else b.onclick = () => res();
+  });
+}
+
+/* ============================================================
+   HVLT: PRESENTATION
+   ============================================================ */
+function presentAuditory(trial){
+  $('pword').className = 'pcenter';
+  $('pword').textContent = 'Trial ' + trial + ' · listening';
+  $('pinfo').textContent = 'Starting…';
+  showScreen('present', true);
+  return new Promise(res => {
+    FORM.list.forEach((w, i) => {
+      const offset = LEAD_MS + i*SOA_MS;
+      const dur = playWord(w, offset);
+      addRow({ task:'hvlt_learn', trial, position:i+1, item:w, t_ms:offset, duration_ms:dur });
+      setTimeout(() => { $('pinfo').textContent = 'Word ' + (i+1) + ' / ' + FORM.list.length; }, offset);
+    });
+    setTimeout(() => { save(); res(); }, LEAD_MS + FORM.list.length*SOA_MS);
+  });
+}
+
+function presentVisual(trial){
+  const el = $('present'), word = $('pword');
+  word.className = 'pword' + (S.meta.seating === 'opposite' ? ' flip' : '');
+  word.textContent = '';
+  $('pinfo').textContent = 'Trial ' + trial + ' · tap anywhere to show the first word';
+  showScreen('present', true);
+  return new Promise(res => {
+    let i = -1, t0 = 0, onset = 0, last = 0;
+    el.onpointerdown = e => {
+      if (e.target.closest('#abort')) return;
+      e.preventDefault();
+      const now = performance.now();
+      if (now - last < 300) return;                       // ignore accidental double taps
+      last = now;
+      if (i >= 0) addRow({ task:'hvlt_learn', trial, position:i+1, item:FORM.list[i],
+                           t_ms:Math.round(onset - t0), duration_ms:Math.round(now - onset) });
+      i++;
+      if (i === 0) t0 = now;
+      if (i >= FORM.list.length){
+        el.onpointerdown = null; word.textContent = ''; save(); res(); return;
+      }
+      word.textContent = FORM.list[i];
+      onset = now;
+      $('pinfo').textContent = 'Word ' + (i+1) + ' / ' + FORM.list.length + ' · tap when the word has been read aloud';
+    };
+  });
+}
+
+/* ============================================================
+   HVLT: RECALL SCORING
+   ============================================================ */
+function recall(trial){
+  const grid = $('rgrid'), list = FORM.list;
+  const order = [];                                       // [{w, t}] in order of recall
+  $('rtitle').textContent = 'Trial ' + trial + ' · Recall';
+  $('rpick').textContent = S.meta.modality === 'visual' ? 'Pick up the tablet so the participant cannot see the screen. ' : '';
+  grid.innerHTML = '';
+  const tiles = list.map(w => {
+    const b = document.createElement('button'); b.className = 'wbtn';
+    b.innerHTML = '<span class="box"></span><span>' + esc(w) + '</span>';
+    grid.appendChild(b); return b;
+  });
+  const t0 = performance.now();
+  const render = () => {
+    tiles.forEach((b, i) => {
+      const k = order.findIndex(o => o.w === list[i]);
+      b.classList.toggle('on', k >= 0);
+      b.querySelector('.box').textContent = k >= 0 ? (k+1) : '';
+    });
+    $('rcount').textContent = order.length + ' / ' + list.length + ' recalled';
+  };
+  tiles.forEach((b, i) => {
+    b.onclick = () => {
+      const k = order.findIndex(o => o.w === list[i]);
+      if (k >= 0) order.splice(k, 1);
+      else order.push({ w:list[i], t:Math.round(performance.now() - t0) });
+      render();
+    };
+  });
+  render();
+  const timer = setInterval(() => {
+    const s = Math.floor((performance.now() - t0)/1000);
+    $('rtimer').textContent = Math.floor(s/60) + ':' + pad2(s%60);
+  }, 250);
+  $('rtimer').textContent = '0:00';
+  showScreen('recall', true);
+  return new Promise(res => {
+    $('rdone').onclick = () => {
+      if (order.length === 0 && !confirm('No words are marked as recalled. Finish this trial anyway?')) return;
+      clearInterval(timer);
+      const dur = Math.round(performance.now() - t0);
+      list.forEach((w, i) => {
+        const k = order.findIndex(o => o.w === w);
+        addRow({ task:'hvlt_recall', trial, position:i+1, item:w,
+                 response: k >= 0 ? 'recalled' : 'not_recalled', correct: k >= 0 ? 1 : 0,
+                 recall_order: k >= 0 ? k+1 : '', t_ms: k >= 0 ? order[k].t : '', duration_ms: dur });
+      });
+      save(); res();
+    };
+  });
+}
+
+/* ============================================================
+   HVLT: RECOGNITION
+   ============================================================ */
+function recognition(){
+  const aud = S.meta.modality === 'auditory';
+  const items = FORM.recog;
+  const word = $('gword'), bOld = $('gold'), bNew = $('gnew'), fin = $('gfinish');
+  const showAnswerButtons = v => { $('gbtns').style.display = v ? '' : 'none'; fin.style.display = v ? 'none' : ''; };
+  $('greplay').style.display = aud ? '' : 'none';
+  showAnswerButtons(true);
+  showScreen('recog', true);
+  return new Promise(res => {
+    let i = 0, onset = 0, plays = 0, busy = true, t0 = performance.now();
+    const setBusy = v => { busy = v; bOld.disabled = bNew.disabled = v; };
+    const show = () => {
+      const it = items[i];
+      $('gprog').textContent = (i+1) + ' / ' + items.length;
+      if (aud){
+        word.className = 'gword small';
+        word.innerHTML = '<div class="lab">Word played</div>' + esc(it.w);
+        plays = 0; play();
+      } else {
+        word.className = 'gword' + (S.meta.seating === 'opposite' ? ' flip' : '');
+        word.textContent = it.w;
+        onset = performance.now(); plays = '';
+      }
+      setBusy(false);
+    };
+    const play = () => {
+      playWord(items[i].w, 0);
+      if (plays === 0) onset = performance.now();
+      plays++;
+    };
+    const answer = resp => {
+      if (busy) return;
+      const now = performance.now(), it = items[i];
+      const correctAns = it.type === 'target' ? 'old' : 'new';
+      addRow({ task:'hvlt_recog', position:i+1, item:it.w, item_type:it.type, correct_answer:correctAns,
+               response:resp, correct: resp === correctAns ? 1 : 0, t_ms:Math.round(onset - t0),
+               rt_ms:Math.round(now - onset), n_plays:plays });
+      save();
+      i++;
+      setBusy(true);
+      word.textContent = '';
+      if (i >= items.length){                             // all answered: allow an undo before finishing
+        $('gprog').textContent = 'All ' + items.length + ' answered';
+        word.className = 'gword small';
+        word.innerHTML = '<div class="lab">Recognition complete</div>Tap Finish, or undo the last answer';
+        showAnswerButtons(false); busy = false;
+        return;
+      }
+      setTimeout(show, RECOG_ITI_MS);
+    };
+    fin.onclick = () => { showAnswerButtons(true); res(); };
+    bOld.onclick = () => answer('old');
+    bNew.onclick = () => answer('new');
+    $('greplay').onclick = () => { if (!busy) play(); };
+    $('gundo').onclick = () => {
+      if (busy || i === 0) return;
+      S.rows.pop(); save();
+      i--; showAnswerButtons(true); show();
+    };
+    setTimeout(show, RECOG_ITI_MS);
+  });
+}
+
+/* ============================================================
+   SDMT (adapted from sdmt-pwa)
+   ============================================================ */
+const sd = {
+  mode:'', durationS:90, keyOrder:SYMBOLS.slice(),
+  rowCorrect:[], rowResp:[], pos:0, row:0, itemIndex:0, seq:'', seqPos:0,
+  running:false, startedAt:0, itemStartedAt:0, timerId:null, resolve:null
+};
+
+function keyHTML(){
+  let h = '';
+  for (let d = 1; d <= 9; d++) h += '<div class="keycell"><div class="sym">' + sd.keyOrder[d-1] + '</div><div class="dig">' + d + '</div></div>';
+  return h;
+}
+
+function buildPad(){
+  const p = $('pad'); p.innerHTML = '';
+  for (let d = 1; d <= 9; d++){
+    const b = document.createElement('button'); b.className = 'key'; b.textContent = d;
+    b.addEventListener('pointerdown', e => { e.preventDefault(); respond(d); });
+    p.appendChild(b);
+  }
+}
+
+function newRow(snap){
+  sd.rowCorrect = []; sd.rowResp = [];
+  for (let i = 0; i < 9; i++){                           // next 9 items of the version's fixed sequence
+    sd.rowCorrect.push(+sd.seq[sd.seqPos % sd.seq.length]); sd.seqPos++;
+    sd.rowResp.push(null);
+  }
+  sd.pos = 0; sd.row++;
+  renderTargets();
+  positionHighlight(snap);
+}
+
+function renderTargets(){
+  const t = $('targets');
+  Array.from(t.querySelectorAll('.tcell')).forEach(n => n.remove());
+  for (let i = 0; i < 9; i++){
+    const cell = document.createElement('div'); cell.className = 'tcell';
+    cell.innerHTML = '<div class="sym">' + sd.keyOrder[sd.rowCorrect[i]-1] + '</div><div class="ans"></div>';
+    t.appendChild(cell);
+  }
+}
+
+function positionHighlight(snap){
+  const h = $('highlight');
+  const cell = $('targets').querySelectorAll('.tcell')[sd.pos];
+  if (!cell) return;
+  if (snap) h.style.transition = 'none';
+  const p = 8;
+  h.style.left = (cell.offsetLeft - p) + 'px';
+  h.style.top = (cell.offsetTop - p) + 'px';
+  h.style.width = (cell.offsetWidth + p*2) + 'px';
+  h.style.height = (cell.offsetHeight + p*2) + 'px';
+  if (snap){ void h.offsetWidth; h.style.transition = ''; }
+}
+
+function respond(d){
+  if (!sd.running) return;
+  const now = performance.now();
+  const correctDigit = sd.rowCorrect[sd.pos];
+  const isCorrect = d === correctDigit;
+  sd.rowResp[sd.pos] = d;
+
+  addRow({ task: sd.mode === 'practice' ? 'sdmt_practice' : 'sdmt',
+           position: sd.itemIndex+1, item: sd.keyOrder[correctDigit-1], correct_answer: correctDigit,
+           response: d, correct: isCorrect ? 1 : 0,
+           t_ms: Math.round(now - sd.startedAt), rt_ms: Math.round(now - sd.itemStartedAt) });
+
+  const cell = $('targets').querySelectorAll('.tcell')[sd.pos];
+  if (cell){
+    const ans = cell.querySelector('.ans');
+    ans.textContent = d;
+    if (sd.mode === 'practice') ans.className = 'ans ' + (isCorrect ? 'ok' : 'bad');
+  }
+
+  sd.itemIndex++;
+  sd.pos++;
+  if (sd.pos >= 9){
+    newRow(true);
+    setTimeout(save, 0);                                   // save once per row, outside the tap handler
+  } else {
+    positionHighlight(false);
+  }
+  sd.itemStartedAt = performance.now();
+}
+
+function tick(){
+  const remain = sd.durationS - (performance.now() - sd.startedAt)/1000;
+  if (remain <= 0){ $('timer').textContent = '0.0'; endSDMT(); return; }
+  $('timer').textContent = remain.toFixed(1);
+}
+
+function runSDMT(mode, durationS){
+  sd.mode = mode; sd.durationS = durationS;
+  sd.itemIndex = 0; sd.row = 0;
+  sd.seq = SDMT_VERSIONS[S.meta.sdmt_version][mode === 'practice' ? 'practice' : 'test']; sd.seqPos = 0;
+  $('keyrow').innerHTML = keyHTML();
+  $('pbadge').style.visibility = mode === 'practice' ? 'visible' : 'hidden';
+  $('timer').textContent = durationS.toFixed(1);
+  showScreen('sdmt', false);
+  newRow(true);
+  return new Promise(res => {
+    sd.resolve = res;
+    let c = 3;
+    $('countNum').textContent = c;
+    $('count').classList.add('active');
+    const cd = setInterval(() => {
+      c--;
+      if (c > 0){ $('countNum').textContent = c; }
+      else { clearInterval(cd); $('count').classList.remove('active'); beginTiming(); }
+    }, 700);
+  });
+}
+
+function beginTiming(){
+  sd.running = true;
+  sd.startedAt = performance.now();
+  sd.itemStartedAt = sd.startedAt;
+  positionHighlight(true);
+  sd.timerId = setInterval(tick, 100);
+}
+
+function endSDMT(){
+  if (!sd.running) return;
+  sd.running = false;
+  clearInterval(sd.timerId);
+  save();
+  const r = sd.resolve; sd.resolve = null;
+  if (r) r();
+}
+
+/* ============================================================
+   SESSION FLOW
+   ============================================================ */
+async function runSession(){
+  const m = S.meta.modality;
+  for (let t = 1; t <= 3; t++){
+    S.phase = 'hvlt_trial_' + t; save();
+    await message({ who:'Examiner · read aloud', title:'HVLT · Trial ' + t,
+                    script: t === 1 ? TXT.trial1[m] : TXT.trialN[m], note: TXT.note[m], button:'Start trial ' + t });
+    if (m === 'auditory') await presentAuditory(t); else await presentVisual(t);
+    await recall(t);
+  }
+
+  S.phase = 'sdmt'; save();
+  sd.keyOrder = SDMT_VERSIONS[S.meta.sdmt_version].key.map(i => SYMBOLS[i]);
+  await message({ who:'Examiner', title:'Please give the tablet to the participant',
+                  script:'The next task is done by the participant.', button:'Continue' });
+  await message({ who:'Participant', title:'Symbol Digit Task', script: TXT.sdmt,
+                  html:'<div class="keyrow" style="margin:0 auto 18px">' + keyHTML() + '</div>',
+                  button: S.meta.sdmt_practice_s > 0 ? 'Start practice' : 'Start', examiner:false });
+  if (S.meta.sdmt_practice_s > 0){
+    await runSDMT('practice', S.meta.sdmt_practice_s);
+    await message({ who:'Participant', title:'Practice finished', script: TXT.sdmtPracticeDone,
+                    button:'Start test', examiner:false });
+  }
+  await runSDMT('test', S.meta.sdmt_duration_s);
+  await message({ title:'Time is up. Thank you!', script:'Please give the tablet back to the examiner.',
+                  button:'Examiner: press and hold to continue', hold:true, examiner:false });
+
+  S.phase = 'hvlt_recog'; save();
+  await message({ who:'Examiner · read aloud', title:'HVLT · Recognition', script: TXT.recog[m],
+                  note: TXT.recogNote[m], button:'Start recognition' });
+  await recognition();
+
+  S.status = 'complete'; S.phase = 'done'; save();
+  showDone();
+}
+
+function showDone(){
+  $('doneSub').textContent = 'Participant ' + S.meta.participant_id + ' · Form ' + S.meta.form + ' · ' +
+    S.meta.modality + ' · SDMT v' + S.meta.sdmt_version + ' · ' + S.rows.length + ' data rows. ' + (saveFailed
+      ? 'WARNING: device storage is full, this session is NOT saved on the device. Download the CSV now, then delete old sessions on the start screen.'
+      : 'Saved on this device.');
+  $('csvBox').value = toCSV(S);
+  showScreen('done', false);
+}
+
+/* ============================================================
+   HOME SCREEN
+   ============================================================ */
+const cfg = { modality:null, form:null, sdmt_version:null, seating:DEFAULTS.seating,
+              sdmt_duration_s:DEFAULTS.sdmt_duration_s, sdmt_practice_s:DEFAULTS.sdmt_practice_s };
+
+function seg(id, options, key){
+  const el = $(id); el.innerHTML = '';
+  options.forEach(([val, label]) => {
+    const b = document.createElement('button'); b.textContent = label;
+    b.classList.toggle('on', cfg[key] === val);
+    b.onclick = () => { cfg[key] = val; seg(id, options, key); updateHome(); };
+    el.appendChild(b);
+  });
+}
+
+function updateHome(){
+  $('fieldSeat').style.display = cfg.modality === 'visual' ? '' : 'none';
+  $('startBtn').disabled = !($('pid').value.trim() && $('exp').value.trim() && cfg.modality && cfg.form && cfg.sdmt_version);
+}
+
+function renderSessions(){
+  const ids = (store.get(IDX_KEY) || []).slice().reverse();
+  const box = $('sessions'); box.innerHTML = '';
+  if (!ids.length){ box.innerHTML = '<p class="sub" style="margin:10px 0">No sessions yet.</p>'; return; }
+  ids.forEach(id => {
+    const s = store.get(sessKey(id)); if (!s) return;
+    const m = s.meta, row = document.createElement('div'); row.className = 'srow';
+    const sv = m.sdmt_version ? ' · SDMT v' + m.sdmt_version : '';
+    const ex = m.experimenter ? ' (' + esc(m.experimenter) + ')' : '';
+    const st = s.status === 'complete' ? 'complete' : s.status + (s.phase ? ' (' + s.phase + ')' : '');
+    row.innerHTML = '<div class="info"><strong>' + esc(m.participant_id) + '</strong> · Form ' + m.form + sv + ' · ' + m.modality +
+      '<div class="st' + (s.status === 'complete' ? '' : ' bad') + '">' + m.session_start.replace('T',' ').slice(0,16) + ex + ' · ' + esc(st) + '</div></div>';
+    const dl = document.createElement('button'); dl.className = 'btn secondary small'; dl.textContent = 'CSV';
+    dl.onclick = () => downloadCSV(s);
+    const sh = document.createElement('button'); sh.className = 'btn secondary small'; sh.textContent = 'Share';
+    sh.onclick = () => shareCSV(s);
+    const del = document.createElement('button'); del.className = 'linkbtn'; del.textContent = 'Delete';
+    del.onclick = () => {
+      if (!confirm('Delete the session of ' + m.participant_id + ' (' + m.session_start.replace('T',' ').slice(0,16) +
+                   ') from this device? Download its CSV first if you still need it.')) return;
+      try { localStorage.removeItem(sessKey(id)); } catch(e){}
+      store.set(IDX_KEY, (store.get(IDX_KEY) || []).filter(x => x !== id));
+      renderSessions();
+    };
+    row.appendChild(dl); row.appendChild(sh); row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+
+async function startSession(){
+  const now = new Date();
+  const meta = {
+    participant_id: $('pid').value.trim(),
+    experimenter: $('exp').value.trim().toUpperCase(),
+    session_id: now.getTime().toString(36),
+    session_start: localIso(now), session_start_ms: now.getTime(),
+    app_version: APP_VERSION,
+    modality: cfg.modality, form: cfg.form,
+    seating: cfg.modality === 'visual' ? cfg.seating : '',
+    sdmt_version: cfg.sdmt_version,
+    sdmt_duration_s: cfg.sdmt_duration_s, sdmt_practice_s: cfg.sdmt_practice_s
+  };
+  FORM = parseForm(cfg.form);
+  if (meta.modality === 'auditory') unlockAudio();         // inside the tap, for iOS
+  if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {});
+
+  if (meta.modality === 'auditory'){
+    $('busy').classList.add('active');
+    const missing = await loadAudio(cfg.form);
+    $('busy').classList.remove('active');
+    if (missing.length){
+      $('homeErr').textContent = 'Cannot start: ' + missing.length + ' of 24 audio files for Form ' + cfg.form +
+        ' could not be loaded: ' + missing.map(w => audioUrl(cfg.form, w)).join(', ');
+      return;
+    }
+    $('homeErr').textContent = '';
+  }
+
+  S = { meta, rows:[], status:'in_progress', phase:'' };
+  const idx = store.get(IDX_KEY) || []; idx.push(meta.session_id);
+  if (!store.set(IDX_KEY, idx) || !store.set(sessKey(meta.session_id), S)){
+    S = null;
+    $('homeErr').textContent = 'Device storage is full. Download the CSVs of old sessions below, then delete them.';
+    return;
+  }
+  history.pushState({ merit:1 }, '');                    // so a back gesture doesn't leave the session
+  runSession();
+}
+
+function initHome(){
+  // sessions interrupted by a reload or crash
+  (store.get(IDX_KEY) || []).forEach(id => {
+    const s = store.get(sessKey(id));
+    if (s && s.status === 'in_progress'){ s.status = 'incomplete'; store.set(sessKey(id), s); }
+  });
+  const bad = Object.keys(FORMS).filter(f => !parseForm(f).ok);
+  if (bad.length) $('homeErr').textContent = 'Word list error in form(s) ' + bad.join(', ') + ': check FORMS in index.html.';
+
+  seg('segMod', [['auditory','Auditory'],['visual','Visual']], 'modality');
+  seg('segForm', Object.keys(FORMS).map(f => [+f, String(f)]), 'form');
+  seg('segSeat', [['opposite','Opposite (word rotated)'],['beside','Beside (upright)']], 'seating');
+  seg('segSdmtVer', Object.keys(SDMT_VERSIONS).map(v => [+v, String(v)]), 'sdmt_version');
+  seg('segDur', SDMT_DURATIONS.map(s => [s, (s/60) + ' min']), 'sdmt_duration_s');
+  seg('segPrac', SDMT_PRACTICE.map(s => [s, s ? s + ' s' : 'Off']), 'sdmt_practice_s');
+  $('pid').addEventListener('input', updateHome);
+  $('exp').addEventListener('input', updateHome);
+  $('startBtn').onclick = startSession;
+  $('audioRefresh').onclick = () => { $('audioStatus').textContent = 'Checking…'; cacheAudio(true); };
+  $('verLine').textContent = 'MERIT v' + APP_VERSION;
+  updateHome();
+  renderSessions();
+  cacheAudio(false);
+}
+
+/* ============================================================
+   WIRE UP
+   ============================================================ */
+buildPad();
+makeHold($('quitBtn'), 1500, endSDMT);
+makeHold($('abort'), 2000, () => {
+  if (S){ S.status = 'aborted'; save(); }
+  location.reload();
+});
+$('dlBtn').onclick = () => downloadCSV(S);
+$('shareBtn').onclick = () => shareCSV(S);
+$('newBtn').onclick = () => location.reload();
+window.addEventListener('resize', () => { if (sd.running) positionHighlight(true); });
+document.addEventListener('contextmenu', e => { if (S) e.preventDefault(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && S && navigator.wakeLock){ navigator.wakeLock.request('screen').catch(() => {}); }
+});
+// A back gesture (Android) or closing the tab must not end a running session by accident.
+window.addEventListener('popstate', () => { if (S && S.status === 'in_progress') history.pushState({ merit:1 }, ''); });
+window.addEventListener('beforeunload', e => { if (S && S.status === 'in_progress'){ e.preventDefault(); e.returnValue = ''; } });
+// iOS can suspend audio after an interruption; any tap resumes it before the next word plays.
+document.addEventListener('pointerdown', () => { if (actx && actx.state !== 'running') actx.resume(); }, true);
+if ('serviceWorker' in navigator && location.protocol !== 'file:'){
+  const hadController = !!navigator.serviceWorker.controller;
+  // a new version was installed: reload onto it, but never during a session
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !S) location.reload(); });
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+initHome();
+</script>
+</body>
+</html>
